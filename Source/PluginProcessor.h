@@ -6,11 +6,17 @@
 #include "DSP/SpectralEngine.h"
 #include "DSP/GlitchEngine.h"
 #include "Parameters.h"
+#include "Mutation/Mutator.h"
+#include "Mutation/UndoStack.h"
+#include <atomic>
 
-class MutationEngineProcessor : public juce::AudioProcessor
+class MutationEngineProcessor : public juce::AudioProcessor,
+                                private juce::AudioProcessorValueTreeState::Listener,
+                                private juce::AsyncUpdater
 {
 public:
     MutationEngineProcessor();
+    ~MutationEngineProcessor() override;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
@@ -35,12 +41,41 @@ public:
 
     juce::AudioProcessorValueTreeState apvts;
 
+    // ---- mutation (message thread only) ------------------------------------
+    void mutate();                          // new sound from the current one; pushes an undo snapshot
+    bool undoMutation();
+    bool redoMutation();
+    void storeSlotA();                      // morph endpoints (MUTATE also sets A = before, B = after)
+    void storeSlotB();
+    bool canUndo() const { return undoStack.canUndo(); }
+    bool canRedo() const { return undoStack.canRedo(); }
+    uint32_t getMutationSeed() const { return mutSeed; }
+    void setMutationSeed (uint32_t s) { mutSeed = s; }
+    bool isParamLocked (int paramIndex) const { return (paramLocks.load() >> paramIndex) & 1u; }
+    void setParamLocked (int paramIndex, bool locked);
+    me::Mask currentLockMask() const;
+    me::SafetyLimits currentSafetyLimits() const;
+    me::MutationState readState() const;
+    void applyState (const me::MutationState&);
+    float getCpuLoad() const { return cpuLoad.load(); }
+
     // Lock-free tap of the output for the editor's scope/spectrum.
     static constexpr int kScopeSize = 2048;
     std::atomic<float> scope[kScopeSize] {};
     std::atomic<int> scopePos { 0 };
 
 private:
+    void parameterChanged (const juce::String& id, float) override;
+    void handleAsyncUpdate() override;
+    void applyMorph();
+
+    me::UndoStack undoStack;
+    me::MutationState slotA, slotB;
+    bool slotsValid = false, applyingState = false;
+    uint32_t mutSeed = 1;
+    std::atomic<std::uint64_t> paramLocks { 0 };
+    std::atomic<float> cpuLoad { 0.0f };
+
     me::ResonatorBank resonator;
     me::FilterBank filter;
     me::FormantEngine formant;

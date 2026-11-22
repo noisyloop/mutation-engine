@@ -29,6 +29,13 @@ if(ME_BUILD_TESTS)
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>)
   add_test(NAME dsp COMMAND me_dsp_tests)
+
+  add_executable(me_mutation_tests Tests/MutationTests.cpp)
+  target_link_libraries(me_mutation_tests PRIVATE me_dsp)
+  target_compile_options(me_mutation_tests PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME mutation COMMAND me_mutation_tests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -76,4 +83,18 @@ if(ME_BUILD_PLUGIN)
     PUBLIC
       juce::juce_recommended_config_flags
       juce::juce_recommended_warning_flags)
+
+  # Headless integration test of the real processor (no host / GUI needed).
+  option(ME_BUILD_SMOKE_TEST "Build the processor smoke test" ON)
+  if(ME_BUILD_SMOKE_TEST)
+    juce_add_console_app(MutationEngineSmoke PRODUCT_NAME "MutationEngineSmoke")
+    target_sources(MutationEngineSmoke PRIVATE
+      Tests/ProcessorSmokeTest.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+    target_include_directories(MutationEngineSmoke PRIVATE Source)
+    target_compile_definitions(MutationEngineSmoke PRIVATE
+      JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(MutationEngineSmoke PRIVATE
+      me_dsp juce::juce_audio_utils juce::juce_dsp
+      juce::juce_recommended_config_flags)
+  endif()
 endif()

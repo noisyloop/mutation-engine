@@ -7,6 +7,116 @@ MutationEngineProcessor::MutationEngineProcessor()
                           .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "STATE", me::createParameterLayout())
 {
+    apvts.addParameterListener (me::ids::mutMorph, this);
+    undoStack.commit (readState());
+}
+
+MutationEngineProcessor::~MutationEngineProcessor()
+{
+    cancelPendingUpdate();
+    apvts.removeParameterListener (me::ids::mutMorph, this);
+}
+
+// ------------------------------------------------------------------ mutation
+me::MutationState MutationEngineProcessor::readState() const
+{
+    me::MutationState s;
+    for (int i = 0; i < me::kNumSound; ++i)
+        if (auto* p = apvts.getParameter (me::kParams[i].id)) s.n[i] = p->getValue();
+    s.seed = mutSeed;
+    return s;
+}
+
+void MutationEngineProcessor::applyState (const me::MutationState& s)
+{
+    const bool was = applyingState;
+    applyingState = true;
+    for (int i = 0; i < me::kNumSound; ++i)
+        if (auto* p = apvts.getParameter (me::kParams[i].id))
+            if (std::fabs (p->getValue() - s.n[i]) > 1.0e-6f)
+            {
+                p->beginChangeGesture();
+                p->setValueNotifyingHost (s.n[i]);
+                p->endChangeGesture();
+            }
+    applyingState = was;
+}
+
+me::Mask MutationEngineProcessor::currentLockMask() const
+{
+    unsigned groups = 0;
+    for (int k = 0; k < me::kNumLockGroups; ++k)
+        if (apvts.getRawParameterValue (me::kParams[me::kLockGroups[k].paramIndex].id)->load() > 0.5f) groups |= 1u << k;
+    return me::lockMaskFor ((me::Mask) paramLocks.load(), groups);
+}
+
+me::SafetyLimits MutationEngineProcessor::currentSafetyLimits() const
+{
+    me::SafetyLimits l;                       // CPU safety: fewer resonator voices when the audio thread is busy
+    const float load = cpuLoad.load();
+    l.maxVoices = load > 0.85f ? 12 : load > 0.6f ? 20 : 32;
+    return l;
+}
+
+void MutationEngineProcessor::setParamLocked (int i, bool locked)
+{
+    if (i < 0 || i >= me::kNumSound) return;
+    const std::uint64_t b = std::uint64_t (1) << i;
+    if (locked) paramLocks.fetch_or (b); else paramLocks.fetch_and (~b);
+}
+
+void MutationEngineProcessor::mutate()
+{
+    const auto cur = readState();
+    undoStack.commit (cur);
+
+    me::MutateOptions o;
+    o.style     = (me::Style) (int) apvts.getRawParameterValue (me::ids::mutStyle)->load();
+    o.intensity = apvts.getRawParameterValue (me::ids::mutIntensity)->load();
+    o.locked    = currentLockMask();
+    o.limits    = currentSafetyLimits();
+    const auto next = me::Mutator::mutate (cur, o);
+
+    slotA = cur; slotB = next; slotsValid = true;          // morph between "before" and "after"
+    applyState (next);
+    applyingState = true;
+    if (auto* m = apvts.getParameter (me::ids::mutMorph)) m->setValueNotifyingHost (1.0f);
+    applyingState = false;
+    mutSeed = next.seed;
+    undoStack.commit (readState());
+}
+
+bool MutationEngineProcessor::undoMutation()
+{
+    me::MutationState out;
+    if (! undoStack.undo (readState(), out)) return false;
+    applyState (out); mutSeed = out.seed;
+    return true;
+}
+
+bool MutationEngineProcessor::redoMutation()
+{
+    me::MutationState out;
+    if (! undoStack.redo (out)) return false;
+    applyState (out); mutSeed = out.seed;
+    return true;
+}
+
+void MutationEngineProcessor::storeSlotA() { const auto s = readState(); if (! slotsValid) slotB = s; slotA = s; slotsValid = true; }
+void MutationEngineProcessor::storeSlotB() { const auto s = readState(); if (! slotsValid) slotA = s; slotB = s; slotsValid = true; }
+
+void MutationEngineProcessor::parameterChanged (const juce::String& id, float)
+{
+    if (id == me::ids::mutMorph && ! applyingState) triggerAsyncUpdate();   // may arrive on any thread
+}
+
+void MutationEngineProcessor::handleAsyncUpdate() { applyMorph(); }
+
+void MutationEngineProcessor::applyMorph()
+{
+    if (! slotsValid) return;
+    const float t = apvts.getRawParameterValue (me::ids::mutMorph)->load();
+    applyState (me::Mutator::morph (slotA, slotB, t, currentLockMask(), readState(), currentSafetyLimits()));
 }
 
 bool MutationEngineProcessor::isBusesLayoutSupported (const BusesLayout& l) const
@@ -32,6 +142,7 @@ void MutationEngineProcessor::prepareToPlay (double sr, int)
 void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
     for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c)
         buffer.clear (c, 0, buffer.getNumSamples());
 
@@ -124,10 +235,19 @@ void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         scope[p].store (0.5f * (ol + or_), std::memory_order_relaxed);
         scopePos.store ((p + 1) % kScopeSize, std::memory_order_relaxed);
     }
+
+    const double blockMs = 1000.0 * buffer.getNumSamples() / sampleRate;
+    const float load = (float) ((juce::Time::getMillisecondCounterHiRes() - t0) / std::max (0.001, blockMs));
+    cpuLoad.store (0.95f * cpuLoad.load() + 0.05f * load, std::memory_order_relaxed);
 }
 
 void MutationEngineProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
+    apvts.state.setProperty ("paramLocks", juce::String ((juce::int64) paramLocks.load()), nullptr);
+    apvts.state.setProperty ("mutSeed", juce::String ((juce::int64) mutSeed), nullptr);
+    apvts.state.setProperty ("slotsValid", slotsValid, nullptr);
+    apvts.state.setProperty ("slotA", juce::String (slotA.toString()), nullptr);
+    apvts.state.setProperty ("slotB", juce::String (slotB.toString()), nullptr);
     if (auto xml = apvts.copyState().createXml())
         copyXmlToBinary (*xml, dest);
 }
@@ -136,7 +256,18 @@ void MutationEngineProcessor::setStateInformation (const void* data, int size)
 {
     if (auto xml = getXmlFromBinary (data, size))
         if (xml->hasTagName (apvts.state.getType()))
+        {
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
+            const auto& st = apvts.state;
+            paramLocks = (std::uint64_t) st.getProperty ("paramLocks", 0).toString().getLargeIntValue();
+            mutSeed = (uint32_t) st.getProperty ("mutSeed", 1).toString().getLargeIntValue();
+            slotsValid = (bool) st.getProperty ("slotsValid", false);
+            if (slotsValid && ! (me::MutationState::fromString (st.getProperty ("slotA").toString().toStdString(), slotA)
+                              && me::MutationState::fromString (st.getProperty ("slotB").toString().toStdString(), slotB)))
+                slotsValid = false;
+            undoStack.clear();
+            undoStack.commit (readState());
+        }
 }
 
 juce::AudioProcessorEditor* MutationEngineProcessor::createEditor() { return new MutationEngineEditor (*this); }
