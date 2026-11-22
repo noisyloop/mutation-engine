@@ -25,7 +25,7 @@ public:
         name = juce::String (kParams[idx].name).toUpperCase();
     }
 
-    void setName (const juce::String& n) { name = n; repaint(); }
+    void setLabel (const juce::String& n) { name = n; repaint(); }
     int paramIndex() const { return idx; }
 
     void resized() override
