@@ -120,7 +120,7 @@ if(ME_BUILD_PLUGIN)
   endif()
 
   # Renders the real editor to a PNG (used for the README screenshot).
-  option(ME_BUILD_SHOT_TOOL "Build the editor screenshot tool" ON)
+  option(ME_BUILD_SHOT_TOOL "Build the editor screenshot tool" OFF)
   if(ME_BUILD_SHOT_TOOL)
     juce_add_console_app(MutationEngineShot PRODUCT_NAME "MutationEngineShot")
     target_sources(MutationEngineShot PRIVATE Tests/ShotTool.cpp ${ME_PLUGIN_SOURCES})

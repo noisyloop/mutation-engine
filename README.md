@@ -47,6 +47,7 @@ Unmentioned parameters load at their default; unknown ids are ignored. Mutation 
 
 ## Screenshots
 ```bash
+cmake -S . -B build -DME_BUILD_SHOT_TOOL=ON && cmake --build build --target MutationEngineShot
 xvfb-run -a build/MutationEngineShot_artefacts/Release/MutationEngineShot out.png "Glass Throat" 0
 ```
 
