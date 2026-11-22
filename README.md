@@ -23,4 +23,4 @@ cmake -S . -B build -DME_BUILD_PLUGIN=OFF && cmake --build build && ctest --test
 # Plugin (fetches JUCE 8.0.6)
 cmake -S . -B build-plugin -DME_BUILD_TESTS=OFF && cmake --build build-plugin --target MutationEngine_VST3
 ```
-Linux needs: `libasound2-dev libfreetype6-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev`.
+Linux needs: `libasound2-dev libfreetype6-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev`.
