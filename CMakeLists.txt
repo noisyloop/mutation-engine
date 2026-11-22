@@ -14,9 +14,21 @@ endif()
 # Reproducible builds: the same sources, toolchain and pinned JUCE tag give the same binary regardless of
 # where the checkout lives, so build-directory and source paths are stripped from the output.
 if(NOT MSVC)
+  # JUCE bakes __DATE__/__TIME__ into juce_core (Time::getCompilationDate); pin them so two builds of the
+  # same commit are byte-identical. SOURCE_DATE_EPOCH (set by the release workflow) wins when present.
+  if(DEFINED ENV{SOURCE_DATE_EPOCH})
+    string(TIMESTAMP ME_BUILD_DATE "%b %e %Y" UTC)   # honours SOURCE_DATE_EPOCH
+    string(TIMESTAMP ME_BUILD_TIME "%H:%M:%S" UTC)
+  else()
+    set(ME_BUILD_DATE "Jan  1 2000")
+    set(ME_BUILD_TIME "00:00:00")
+  endif()
   add_compile_options(
     "-ffile-prefix-map=${CMAKE_SOURCE_DIR}=."
-    "-ffile-prefix-map=${CMAKE_BINARY_DIR}=_build")
+    "-ffile-prefix-map=${CMAKE_BINARY_DIR}=_build"
+    "-Wno-builtin-macro-redefined"
+    "-D__DATE__=\"${ME_BUILD_DATE}\""
+    "-D__TIME__=\"${ME_BUILD_TIME}\"")
 endif()
 
 option(ME_COPY_PLUGIN "Copy the built plugin into the user's plugin folder after building" OFF)
