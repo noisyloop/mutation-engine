@@ -1,0 +1,19 @@
+# Mutation Engine preset
+name: Shatter
+category: Glitch
+author: NoisyLoop
+description: Sparse 1/8 hits, shifted and scrambled.
+mode = 1
+glitch_div = 1
+glitch_prob = 0.45
+glitch_amount = 0.4
+spec_shift = 24
+spec_dropout = 0.2
+spec_scramble = 0.6
+vowel = 4
+formant_mix = 0.3
+mix = 0.85
+rnd_rate = 1.0
+mod1_src = 4
+mod1_dst = 12
+mod1_amt = 0.25

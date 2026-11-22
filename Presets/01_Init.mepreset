@@ -1,0 +1,6 @@
+# Mutation Engine preset
+name: Init
+category: Resonate
+author: NoisyLoop
+description: Neutral starting point.
+mix = 1.0

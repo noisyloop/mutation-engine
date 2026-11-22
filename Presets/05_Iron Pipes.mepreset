@@ -1,0 +1,17 @@
+# Mutation Engine preset
+name: Iron Pipes
+category: Resonate
+author: NoisyLoop
+description: Long, dense low resonances with drifting stiffness.
+res_root = 55
+res_voices = 32
+res_inharm = 0.4
+res_damp = 0.25
+res_feedback = 0.5
+res_spread = 0.9
+filt_cutoff = 7000
+mix = 0.7
+rnd_rate = 0.6
+mod1_src = 4
+mod1_dst = 2
+mod1_amt = 0.2

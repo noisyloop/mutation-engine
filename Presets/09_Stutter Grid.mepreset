@@ -1,0 +1,13 @@
+# Mutation Engine preset
+name: Stutter Grid
+category: Glitch
+author: NoisyLoop
+description: Tempo-locked repeats and chops.
+mode = 1
+glitch_div = 2
+glitch_prob = 0.55
+glitch_amount = 0.6
+spec_shift = 0
+spec_dropout = 0.1
+spec_scramble = 0.1
+mix = 0.9

@@ -102,6 +102,26 @@ bool MutationEngineProcessor::redoMutation()
     return true;
 }
 
+void MutationEngineProcessor::loadPreset (int index)
+{
+    if (index < 0 || index >= presets.size()) return;
+    undoStack.commit (readState());                       // the previous sound stays one undo away
+    PresetManager::apply (apvts, presets.get (index).preset);
+    slotsValid = false;
+    currentPreset = index;
+    currentPresetName = juce::String (presets.get (index).preset.name);
+    undoStack.commit (readState());
+}
+
+bool MutationEngineProcessor::saveUserPreset (const juce::String& name, const juce::String& category)
+{
+    const auto p = PresetManager::capture (apvts, name, category);
+    if (! presets.saveUser (p)) return false;
+    currentPreset = presets.findByName (name);
+    currentPresetName = name;
+    return true;
+}
+
 void MutationEngineProcessor::storeSlotA() { const auto s = readState(); if (! slotsValid) slotB = s; slotA = s; slotsValid = true; }
 void MutationEngineProcessor::storeSlotB() { const auto s = readState(); if (! slotsValid) slotA = s; slotB = s; slotsValid = true; }
 
@@ -136,6 +156,7 @@ void MutationEngineProcessor::prepareToPlay (double sr, int)
     for (auto& d : dryDelay) d.assign ((size_t) me::SpectralEngine::latencySamples(), 0.0f);
     dryPos = 0; lastSeed = -1; internalPpq = 0.0;
     setLatencySamples (me::SpectralEngine::latencySamples());   // constant in every mode
+    mod.prepare (sr);
     heldNote = -1; midiRootHz = 0.0f;
 }
 
@@ -150,28 +171,60 @@ void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     for (const auto meta : midi)
     {
         const auto m = meta.getMessage();
-        if (m.isNoteOn())       { heldNote = m.getNoteNumber(); midiRootHz = (float) juce::MidiMessage::getMidiNoteInHertz (heldNote); }
+        if (m.isNoteOn())       { lastVelocity = m.getFloatVelocity(); heldNote = m.getNoteNumber(); midiRootHz = (float) juce::MidiMessage::getMidiNoteInHertz (heldNote); }
         else if (m.isNoteOff() && m.getNoteNumber() == heldNote) { /* keep last pitch: resonance rings on */ }
         else if (m.isAllNotesOff() || m.isAllSoundOff()) { heldNote = -1; midiRootHz = 0.0f; }
     }
 
     const auto get = [this] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
+    const auto getI = [this] (int i) { return apvts.getRawParameterValue (me::kParams[i].id)->load(); };
+
+    // ---- modulation: advance sources once per block, then modulate the targets
+    float inLevel = 0.0f;
+    {
+        const auto* inL = buffer.getReadPointer (0);
+        const int n = buffer.getNumSamples();
+        for (int i = 0; i < n; ++i) inLevel += std::fabs (inL[i]);
+        inLevel /= (float) std::max (1, n);
+    }
+    mod.setRates (getI (me::pid::Lfo1Rate), (int) getI (me::pid::Lfo1Shape), getI (me::pid::Lfo2Rate), (int) getI (me::pid::Lfo2Shape), getI (me::pid::RndRate));
+    mod.setVelocity (lastVelocity);
+    me::ModEngine::Slot slots[me::kNumModSlots];
+    for (int k = 0; k < me::kNumModSlots; ++k)
+        slots[k] = { (int) getI (me::modSlotParam (k, 0)), (int) getI (me::modSlotParam (k, 1)), getI (me::modSlotParam (k, 2)) };
+    mod.setSlots (slots);
+    mod.advance (buffer.getNumSamples(), inLevel);
+    for (int s = 0; s < me::ModEngine::kNumSources; ++s) modSource[s].store (mod.source (s), std::memory_order_relaxed);
+    const auto M = [&] (int i) { return mod.modulate (i, getI (i)); };
+
+    float feedback = M (me::pid::ResFeed), damping = M (me::pid::ResDamp), filtRes = M (me::pid::FiltRes);
+    float cutoff = M (me::pid::FiltCutoff), dropout = M (me::pid::SpDrop);
+    const int filtType = (int) get (me::ids::filtType);
+    me::ModEngine::safeguard (feedback, damping, filtRes, cutoff, filtType, dropout);   // modulation can't push past the safety limits
 
     me::ResonatorBank::Params rp;
-    rp.rootHz     = (get (me::ids::midiTrack) > 0.5f && midiRootHz > 0.0f) ? midiRootHz : get (me::ids::resRoot);
+    rp.rootHz     = mod.modulate (me::pid::ResRoot, (get (me::ids::midiTrack) > 0.5f && midiRootHz > 0.0f) ? midiRootHz : get (me::ids::resRoot));
     rp.voices     = (int) get (me::ids::resVoices);
-    rp.inharmonic = get (me::ids::resInharm);
-    rp.damping    = get (me::ids::resDamp);
-    rp.feedback   = get (me::ids::resFeed);
-    rp.spread     = get (me::ids::resSpread);
+    rp.inharmonic = M (me::pid::ResInharm);
+    rp.damping    = damping;
+    rp.feedback   = feedback;
+    rp.spread     = M (me::pid::ResSpread);
     resonator.setParams (rp);
-    filter.set ((me::FilterBank::Type) (int) get (me::ids::filtType), get (me::ids::filtCutoff), get (me::ids::filtRes));
-    formant.set (get (me::ids::vowel), get (me::ids::formShift));
+    effRootHz.store (rp.rootHz, std::memory_order_relaxed);
+    effFeedback.store (feedback, std::memory_order_relaxed);
+    filter.set ((me::FilterBank::Type) filtType, cutoff, filtRes);
+    formant.set (M (me::pid::Vowel), M (me::pid::FormShift));
 
     const int mode = (int) get (me::ids::mode);   // 0 Resonate, 1 Glitch, 2 Phantom
 
     const int seedNow = (int) get (me::ids::seed);
-    if (seedNow != lastSeed) { lastSeed = seedNow; glitch.reseed ((uint32_t) seedNow * 2654435761u + 1u); spectral->reseed ((uint32_t) seedNow * 40503u + 7u); }
+    if (seedNow != lastSeed)
+    {
+        lastSeed = seedNow;
+        glitch.reseed ((uint32_t) seedNow * 2654435761u + 1u);
+        spectral->reseed ((uint32_t) seedNow * 40503u + 7u);
+        mod.reseed ((uint32_t) seedNow * 69069u + 3u);
+    }
 
     // Tempo: follow the host when it provides one, otherwise free-run at 120 BPM.
     double bpm = 120.0, ppq = internalPpq;
@@ -184,21 +237,22 @@ void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     internalPpq = ppq + buffer.getNumSamples() * bpm / (60.0 * sampleRate);
 
     me::SpectralEngine::Params sp;
-    if (mode == 1) { sp.binShift = (int) get (me::ids::spShift); sp.dropout = get (me::ids::spDrop); sp.scramble = get (me::ids::spScram); }
-    if (mode == 2) { sp.freeze = get (me::ids::spFreeze) > 0.5f; sp.drift = get (me::ids::spDrift); sp.binShift = (int) get (me::ids::spShift); }
+    if (mode == 1) { sp.binShift = (int) get (me::ids::spShift); sp.dropout = dropout; sp.scramble = M (me::pid::SpScram); }
+    if (mode == 2) { sp.freeze = get (me::ids::spFreeze) > 0.5f; sp.drift = M (me::pid::SpDrift); sp.binShift = (int) get (me::ids::spShift); }
     spectral->setParams (sp);
 
     me::GlitchEngine::Params gp;
     static const int stepsTable[] = { 1, 2, 4, 8 };
     gp.bpm = (float) bpm; gp.stepsPerBeat = stepsTable[std::max (0, std::min (3, (int) get (me::ids::glDiv)))];
-    gp.probability = mode == 1 ? get (me::ids::glProb) : 0.0f;
+    gp.probability = mode == 1 ? M (me::pid::GlProb) : 0.0f;
     gp.intensity = get (me::ids::glAmt);
     glitch.setParams (gp);
     glitch.setPosition (ppq);
 
-    const float mix     = get (me::ids::mix);
-    const float formMix = get (me::ids::formMix);
+    const float mix     = M (me::pid::Mix);
+    const float formMix = M (me::pid::FormMix);
     const float outGain = juce::Decibels::decibelsToGain (get (me::ids::output));
+    float peak = 0.0f;
 
     auto* L = buffer.getWritePointer (0);
     auto* R = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : buffer.getWritePointer (0);
@@ -230,11 +284,14 @@ void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         const float ol = me::sanitize ((dDl + mix * (wl - dDl)) * outGain, 1.0f);
         const float or_ = me::sanitize ((dDr + mix * (wr - dDr)) * outGain, 1.0f);
         L[i] = ol; R[i] = or_;
+        peak = std::max (peak, std::max (std::fabs (ol), std::fabs (or_)));
 
         const int p = scopePos.load (std::memory_order_relaxed);
         scope[p].store (0.5f * (ol + or_), std::memory_order_relaxed);
         scopePos.store ((p + 1) % kScopeSize, std::memory_order_relaxed);
     }
+
+    outPeak.store (std::max (peak, outPeak.load() * 0.9f), std::memory_order_relaxed);
 
     const double blockMs = 1000.0 * buffer.getNumSamples() / sampleRate;
     const float load = (float) ((juce::Time::getMillisecondCounterHiRes() - t0) / std::max (0.001, blockMs));
@@ -245,6 +302,7 @@ void MutationEngineProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     apvts.state.setProperty ("paramLocks", juce::String ((juce::int64) paramLocks.load()), nullptr);
     apvts.state.setProperty ("mutSeed", juce::String ((juce::int64) mutSeed), nullptr);
+    apvts.state.setProperty ("presetName", currentPresetName, nullptr);
     apvts.state.setProperty ("slotsValid", slotsValid, nullptr);
     apvts.state.setProperty ("slotA", juce::String (slotA.toString()), nullptr);
     apvts.state.setProperty ("slotB", juce::String (slotB.toString()), nullptr);
@@ -261,6 +319,8 @@ void MutationEngineProcessor::setStateInformation (const void* data, int size)
             const auto& st = apvts.state;
             paramLocks = (std::uint64_t) st.getProperty ("paramLocks", 0).toString().getLargeIntValue();
             mutSeed = (uint32_t) st.getProperty ("mutSeed", 1).toString().getLargeIntValue();
+            currentPresetName = st.getProperty ("presetName", "Init").toString();
+            currentPreset = presets.findByName (currentPresetName);
             slotsValid = (bool) st.getProperty ("slotsValid", false);
             if (slotsValid && ! (me::MutationState::fromString (st.getProperty ("slotA").toString().toStdString(), slotA)
                               && me::MutationState::fromString (st.getProperty ("slotB").toString().toStdString(), slotB)))

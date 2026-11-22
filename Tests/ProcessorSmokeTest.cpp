@@ -97,6 +97,64 @@ int main()
     CHECK (statesMatch (q.readState(), p.readState(), false), "A/B slots restored (morph works after reload)");
     CHECK (! statesMatch (p.readState(), B, false), "...and the restored morph actually moved the sound");
 
+    std::puts ("presets: factory library loads, applies, undoes, saves");
+    {
+        MutationEngineProcessor r; r.setPlayConfigDetails (2, 2, 48000.0, 512); r.prepareToPlay (48000.0, 512);
+        const auto tmp = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("me_smoke_presets");
+        tmp.deleteRecursively(); r.presets.setUserDirectory (tmp);
+        CHECK (r.presets.size() >= 12, "factory presets are embedded in the binary");
+        CHECK (r.getNumPrograms() == r.presets.size(), "host sees one program per preset");
+
+        bool allSane = true; int modeSeen[3] = { 0, 0, 0 };
+        for (int i = 0; i < r.presets.size(); ++i)
+        {
+            r.loadPreset (i);
+            allSane &= r.getCurrentPresetIndex() == i && r.getCurrentPresetName() == juce::String (r.presets.get (i).preset.name);
+            allSane &= renderIsSane (r);
+            ++modeSeen[(int) r.presets.get (i).preset.get (me::pid::Mode)];
+        }
+        CHECK (allSane, "every factory preset loads and renders finite, bounded audio");
+        CHECK (modeSeen[0] > 0 && modeSeen[1] > 0 && modeSeen[2] > 0, "presets cover all three modes");
+
+        const int glass = r.presets.findByName ("Glass Throat");
+        const int bell = r.presets.findByName ("Bell Choir");
+        r.loadPreset (glass);
+        const auto glassState = r.readState();
+        CHECK (std::fabs (r.apvts.getRawParameterValue (me::ids::resRoot)->load() - 220.0f) < 0.5f, "preset values reach the parameters");
+        CHECK (r.apvts.getRawParameterValue ("mod1_src")->load() == 1.0f && r.apvts.getRawParameterValue ("mod1_dst")->load() == 8.0f, "modulation assignments are part of a preset");
+        r.loadPreset (bell);
+        CHECK (r.undoMutation() && statesMatch (r.readState(), glassState, false), "loading a preset is undoable");
+
+        r.loadPreset (glass);
+        CHECK (r.saveUserPreset ("Smoke Test", "User"), "user preset saves");
+        CHECK (tmp.getChildFile ("Smoke Test.mepreset").existsAsFile(), "...to a .mepreset file");
+        const int user = r.presets.findByName ("Smoke Test");
+        CHECK (user >= 0 && ! r.presets.get (user).factory, "...and appears in the browser as a user preset");
+        r.loadPreset (bell); r.loadPreset (user);
+        CHECK (std::fabs (r.apvts.getRawParameterValue (me::ids::resRoot)->load() - 220.0f) < 0.5f, "a saved preset reloads its values");
+        tmp.deleteRecursively();
+    }
+
+    std::puts ("modulation: assigned LFO moves the target, safety still holds");
+    {
+        MutationEngineProcessor r; r.setPlayConfigDetails (2, 2, 48000.0, 512); r.prepareToPlay (48000.0, 512);
+        auto set = [&] (const char* id, float actual) { auto* q = r.apvts.getParameter (id); q->setValueNotifyingHost (q->convertTo0to1 (actual)); };
+        set ("lfo1_rate", 8.0f); set ("lfo1_shape", 3.0f);                          // fast square LFO
+        set ("mod1_src", 1.0f); set ("mod1_dst", 4.0f); set ("mod1_amt", 1.0f);     // LFO 1 -> Feedback, full depth
+        set ("res_feedback", 0.9f); set ("res_damp", 0.0f);                          // already past the safe region
+        juce::AudioBuffer<float> buf (2, 512); juce::MidiBuffer midi; juce::Random rnd (5);
+        float maxFb = 0; bool seenSource = false;
+        for (int b = 0; b < 60; ++b)
+        {
+            for (int c = 0; c < 2; ++c) for (int i = 0; i < 512; ++i) buf.setSample (c, i, rnd.nextFloat() - 0.5f);
+            r.processBlock (buf, midi);
+            maxFb = std::max (maxFb, r.effFeedback.load()); seenSource |= std::fabs (r.modSource[1].load()) > 0.9f;
+        }
+        CHECK (seenSource, "LFO source is running");
+        CHECK (maxFb <= me::SafetyLimits().maxFeedback + 1e-4f, "modulated + base feedback is clamped to the safety limit");
+        CHECK (renderIsSane (r), "output stays bounded under hard modulation");
+    }
+
     std::puts (failures ? "FAILED" : "ALL PASSED");
     return failures ? 1 : 0;
 }

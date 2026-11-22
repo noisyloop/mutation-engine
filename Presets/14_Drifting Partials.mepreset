@@ -1,0 +1,10 @@
+# Mutation Engine preset
+name: Drifting Partials
+category: Phantom
+author: NoisyLoop
+description: Maximum drift, slightly detuned down.
+mode = 2
+spec_drift = 1.0
+spec_shift = -3
+filt_cutoff = 10000
+mix = 0.75

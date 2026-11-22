@@ -1,0 +1,17 @@
+# Mutation Engine preset
+name: Tin Drum
+category: Resonate
+author: NoisyLoop
+description: Short metallic body that opens up with the input level.
+res_root = 90
+res_voices = 12
+res_inharm = 0.8
+res_damp = 0.7
+res_feedback = 0.1
+res_spread = 0.4
+filt_cutoff = 5000
+filt_res = 1.5
+mix = 0.85
+mod1_src = 3
+mod1_dst = 6
+mod1_amt = 0.4

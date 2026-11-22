@@ -1,0 +1,10 @@
+# Mutation Engine preset
+name: Frozen Cathedral
+category: Phantom
+author: NoisyLoop
+description: Hit FREEZE while audio plays to hold the spectrum as a drone.
+mode = 2
+spec_drift = 0.6
+spec_shift = 0
+filt_cutoff = 6000
+mix = 0.7

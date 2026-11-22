@@ -1,0 +1,19 @@
+# Mutation Engine preset
+name: Vowel Morph
+category: Vocal
+author: NoisyLoop
+description: A slow triangle LFO sweeps A through U.
+res_root = 147
+res_voices = 28
+res_inharm = 0.05
+res_damp = 0.35
+res_feedback = 0.3
+res_spread = 0.6
+vowel = 0
+formant_mix = 1
+mix = 0.9
+lfo1_rate = 0.15
+lfo1_shape = 1
+mod1_src = 1
+mod1_dst = 8
+mod1_amt = 0.9

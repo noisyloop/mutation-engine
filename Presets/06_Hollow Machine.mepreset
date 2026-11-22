@@ -1,0 +1,15 @@
+# Mutation Engine preset
+name: Hollow Machine
+category: Resonate
+author: NoisyLoop
+description: Band-passed hollow tone for drum loops.
+res_root = 110
+res_voices = 8
+res_inharm = 0.3
+res_damp = 0.6
+res_feedback = 0.0
+res_spread = 0.5
+filt_type = 2
+filt_cutoff = 800
+filt_res = 3
+mix = 0.9
