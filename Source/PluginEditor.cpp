@@ -7,6 +7,8 @@ const char* const knobIds[][2] = {
     { me::ids::resRoot, "ROOT" }, { me::ids::resVoices, "VOICES" }, { me::ids::resInharm, "INHARM" },
     { me::ids::resDamp, "DAMP" }, { me::ids::resFeed, "FEEDBACK" }, { me::ids::resSpread, "SPREAD" },
     { me::ids::vowel, "VOWEL" }, { me::ids::formShift, "FORMANT" }, { me::ids::formMix, "F-MIX" },
+    { me::ids::glProb, "GL PROB" }, { me::ids::glAmt, "GL AMT" }, { me::ids::spDrift, "DRIFT" },
+    { me::ids::spShift, "BIN SHIFT" }, { me::ids::spDrop, "DROPOUT" }, { me::ids::spScram, "SCRAMBLE" },
     { me::ids::filtCutoff, "CUTOFF" }, { me::ids::filtRes, "RES" }, { me::ids::mix, "MIX" }, { me::ids::output, "OUT" } };
 }
 
@@ -26,6 +28,12 @@ MutationEngineEditor::MutationEngineEditor (MutationEngineProcessor& p) : AudioP
         addAndMakeVisible (kn->slider); addAndMakeVisible (kn->label);
         knobs.push_back (std::move (kn));
     }
+    modeBox.addItemList ({ "Resonate", "Glitch", "Phantom" }, 1);
+    divBox.addItemList ({ "1/4", "1/8", "1/16", "1/32" }, 1);
+    modeAtt   = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.apvts, me::ids::mode, modeBox);
+    divAtt    = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (p.apvts, me::ids::glDiv, divBox);
+    freezeAtt = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (p.apvts, me::ids::spFreeze, freezeBtn);
+    addAndMakeVisible (modeBox); addAndMakeVisible (divBox); addAndMakeVisible (freezeBtn);
     setResizable (true, true);
     setResizeLimits (800, 480, 1800, 1100);
     setSize (1100, 620);
@@ -59,9 +67,10 @@ void MutationEngineEditor::paint (juce::Graphics& g)
 void MutationEngineEditor::resized()
 {
     auto r = getLocalBounds().reduced (20);
-    r.removeFromTop (40);
+    auto top = r.removeFromTop (40);
+    freezeBtn.setBounds (top.removeFromRight (90)); divBox.setBounds (top.removeFromRight (80).reduced (4)); modeBox.setBounds (top.removeFromRight (130).reduced (4));
     scopeArea = r.removeFromTop (r.getHeight() / 2).reduced (0, 6);
-    const int cols = 7, rows = 2;
+    const int cols = 10, rows = 2;
     const int w = r.getWidth() / cols, h = r.getHeight() / rows;
     for (size_t i = 0; i < knobs.size(); ++i)
     {

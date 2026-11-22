@@ -6,12 +6,15 @@ Experimental spectral resonator: 32-voice resonator bank, vowel formants, spectr
 
 *Design preview (HTML render in `Assets/ui-preview/`), not yet the JUCE editor. The current editor is the foundation version.*
 
-## Status (step 1 + start of step 2)
+## Status (steps 1-3 core)
 - JUCE 8 / CMake project, stereo I/O, APVTS parameters, state save/restore, basic editor with live scope
 - DSP (header-only, JUCE-free): `ResonatorBank`, `FilterBank`, `FormantEngine`
 - MIDI pitch control of the resonator root
 - Unit tests: impulse response, tuning, feedback stability, determinism, parameter-sweep safety, filter modes, formant peaks
-- Not yet: spectral engine, glitch, mutation core, presets, full UI
+- `SpectralEngine`: 1024-pt STFT (75% overlap), freeze with drifting partials, bin shift, bin dropout, bin scramble (seeded, deterministic). Constant 1024-sample latency, reported to the host; dry path is delay-compensated
+- `GlitchEngine`: tempo-synced events (stutter, reverse, crush, gate) decided per grid step from a seeded RNG; follows host tempo/position
+- Modes wired: **Resonate**, **Glitch**, **Phantom** (P0)
+- Not yet: mutation core, presets, full UI, P1 modes (Fractal, Liquefy, Collapse)
 
 ## Build
 ```bash

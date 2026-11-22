@@ -3,6 +3,8 @@
 #include "DSP/ResonatorBank.h"
 #include "DSP/FilterBank.h"
 #include "DSP/FormantEngine.h"
+#include "DSP/SpectralEngine.h"
+#include "DSP/GlitchEngine.h"
 #include "Parameters.h"
 
 class MutationEngineProcessor : public juce::AudioProcessor
@@ -42,6 +44,11 @@ private:
     me::ResonatorBank resonator;
     me::FilterBank filter;
     me::FormantEngine formant;
+    std::unique_ptr<me::SpectralEngine> spectral = std::make_unique<me::SpectralEngine>();
+    me::GlitchEngine glitch;
+    std::vector<float> dryDelay[2];     // aligns dry with the latency of the spectral stage
+    int dryPos = 0, lastSeed = -1;
+    double internalPpq = 0.0;           // free-running musical clock when the host is stopped
     double sampleRate = 44100.0;
     float midiRootHz = 0.0f;   // 0 = no note held
     int heldNote = -1;
