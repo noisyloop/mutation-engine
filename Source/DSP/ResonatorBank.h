@@ -1,5 +1,6 @@
 #pragma once
 #include "Common.h"
+#include <cstring>
 
 namespace me
 {
@@ -21,7 +22,7 @@ public:
         float spread     = 0.5f;  // 0..1 stereo width
     };
 
-    void prepare (double sr) { sampleRate = sr; reset(); setParams (params); }
+    void prepare (double sr) { sampleRate = sr; configured = false; reset(); setParams (params); }
 
     void reset()
     {
@@ -31,6 +32,11 @@ public:
 
     void setParams (const Params& p)
     {
+        // Cheap early-out: the plugin calls this every few samples while parameters glide.
+        if (configured && p.voices == params.voices && sameBits (p.rootHz, params.rootHz) && sameBits (p.inharmonic, params.inharmonic)
+            && sameBits (p.damping, params.damping) && sameBits (p.feedback, params.feedback) && sameBits (p.spread, params.spread))
+            return;
+        configured = true;
         params = p;
         params.voices   = std::max (1, std::min (p.voices, kMaxVoices));
         params.feedback = std::max (0.0f, std::min (p.feedback, 1.0f));
@@ -88,7 +94,9 @@ public:
     }
 
 private:
+    static bool sameBits (float a, float b) noexcept { return std::memcmp (&a, &b, sizeof a) == 0; }   // exact, warning-free
     double sampleRate = 44100.0;
+    bool configured = false;
     Params params;
     int active = 0;
     float norm = 1.0f, fbL = 0.0f, fbR = 0.0f;

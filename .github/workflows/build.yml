@@ -1,27 +1,86 @@
 name: build
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # JUCE-free DSP / mutation / preset tests on every toolchain we ship with.
   dsp-tests:
     strategy:
       fail-fast: false
-      matrix: { os: [ubuntu-24.04, macos-14] }
+      matrix:
+        include:
+          - { name: "linux-gcc",   os: ubuntu-24.04, cc: gcc,   cxx: g++ }
+          - { name: "linux-clang", os: ubuntu-24.04, cc: clang, cxx: clang++, libcxx: true }   # libc++ = same standard library as Apple clang
+          - { name: "macos",       os: macos-14,     cc: clang, cxx: clang++ }
+    name: dsp-tests (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - run: cmake -S . -B build -DME_BUILD_PLUGIN=OFF -DCMAKE_BUILD_TYPE=Release
+      - name: libc++
+        if: matrix.libcxx
+        run: sudo apt-get update && sudo apt-get install -y libc++-dev libc++abi-dev
+      - name: Configure
+        run: |
+          FLAGS=""; [ "${{ matrix.libcxx }}" = "true" ] && FLAGS="-stdlib=libc++"
+          cmake -S . -B build -DME_BUILD_PLUGIN=OFF -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_CXX_FLAGS="$FLAGS" -DCMAKE_EXE_LINKER_FLAGS="$FLAGS"
       - run: cmake --build build --config Release
       - run: ctest --test-dir build --output-on-failure
+
+  # The real plugin + the headless processor suites (smoke + step 6 stress/beta suite).
   plugin:
     strategy:
       fail-fast: false
-      matrix: { os: [ubuntu-24.04, macos-14] }
+      matrix:
+        include:
+          - { name: "linux",  os: ubuntu-24.04 }
+          - { name: "macos",  os: macos-14 }
+    name: plugin (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - name: Linux deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libfreetype6-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libfreetype6-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev xvfb
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DME_BUILD_TESTS=OFF
-      - run: cmake --build build --config Release --target MutationEngine_VST3 MutationEngineSmoke -j 4
+      - name: Build (VST3${{ runner.os == 'macOS' && ' + AU' || '' }}, smoke, stress)
+        run: |
+          TARGETS="MutationEngine_VST3 MutationEngineSmoke MutationEngineStress"
+          [ "$RUNNER_OS" = "macOS" ] && TARGETS="$TARGETS MutationEngine_AU"
+          cmake --build build --config Release --target $TARGETS -j 4
       - name: Processor smoke test
         run: $(find build -name MutationEngineSmoke -type f -perm -u+x | head -1)
+      - name: Beta stress suite (latency, sample rates, automation, recall, safety, threads, CPU)
+        run: $(find build -name MutationEngineStress -type f -perm -u+x | head -1)
+
+  # Memory errors, undefined behaviour and data races (Linux, clang-free: gcc sanitizers).
+  sanitizers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: asan-ubsan, flags: "-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -O1 -g" }
+          - { name: tsan,       flags: "-fsanitize=thread -fno-omit-frame-pointer -O1 -g" }
+    name: sanitizers (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux deps
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libfreetype6-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev
+      - run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DME_BUILD_TESTS=OFF -DME_BUILD_SHOT_TOOL=OFF \
+            -DCMAKE_CXX_FLAGS="${{ matrix.flags }}" -DCMAKE_C_FLAGS="${{ matrix.flags }}" -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.flags }}"
+          cmake --build build --target MutationEngineSmoke MutationEngineStress -j 4
+      - name: Smoke test
+        run: $(find build -name MutationEngineSmoke -type f -perm -u+x | head -1)
+      - name: Stress suite
+        env:
+          ME_STRESS_CPU_LIMIT: "100"   # sanitizer builds are several times slower; correctness is what matters here
+        run: $(find build -name MutationEngineStress -type f -perm -u+x | head -1)

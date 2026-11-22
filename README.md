@@ -18,7 +18,8 @@ Experimental spectral resonator: 32-voice resonator bank, vowel formants, spectr
 - **Interface** (`Source/UI/`): dark theme with a custom look-and-feel, scaled from a fixed 1600x1000 design space. Live spectrogram waterfall with spectrum, the 32 resonance positions and the formant peaks overlaid; output scope; draggable vowel chart (drag along A-E-I-O-U) and filter response (drag for cutoff / resonance); resonance-bank bars; per-mode panels (Resonate / Glitch / Phantom); knobs with lock icons and a modulation badge; live CPU, output peak, latency and feedback-safety readouts
 - **Modulation**: two LFOs (sine/triangle/saw/square), an input envelope follower, a seeded random source and MIDI velocity, routed through four assignment slots to 15 destinations. Modulated values are clamped by the same safety limits as mutation
 - **Presets**: 16 factory presets (embedded in the binary) across Resonate, Vocal, Glitch, Phantom and Mutant; user presets save to `~/Library/Application Support/NoisyLoop/MutationEngine/Presets` (macOS) or the platform's user data folder. Loading a preset is undoable and the host sees them as programs
-- Not yet: P1 modes (Fractal, Liquefy, Collapse), parameter smoothing
+- **Beta hardening**: parameters glide (20-30 ms) so mutations, preset loads, automation and block-rate modulation never click; latency-compensated bypass; NaN/Inf input is sanitised; a stress suite covers latency, sample rates 44.1-192 kHz, block sizes 1-4096, automation, preset recall, feedback safety, threading and CPU; sanitizer and multi-toolchain CI; release workflow producing macOS (universal) and Linux archives
+- Not yet: P1 modes (Fractal, Liquefy, Collapse); macOS and DAW verification
 
 ## Presets
 Presets are plain text (`Presets/*.mepreset`), readable and hand-editable:
@@ -46,11 +47,15 @@ Unmentioned parameters load at their default; unknown ids are ignored. Mutation 
 
 ## Screenshots
 ```bash
+cmake -S . -B build -DME_BUILD_SHOT_TOOL=ON && cmake --build build --target MutationEngineShot
 xvfb-run -a build/MutationEngineShot_artefacts/Release/MutationEngineShot out.png "Glass Throat" 0
 ```
 
 ## Tests
 `me_dsp_tests` (DSP), `me_mutation_tests` (mutation core), `me_preset_tests` (preset format, modulation, factory library) and `MutationEngineSmoke` (real processor + parameter tree, headless) all run in CI.
+
+## Install
+See **[INSTALL.md](INSTALL.md)** for pre-built archives, building from source, DAW notes and troubleshooting on macOS and Linux, and **[docs/TESTING.md](docs/TESTING.md)** for the automated suites and the manual DAW test plan.
 
 ## Build
 ```bash

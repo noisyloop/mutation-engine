@@ -24,6 +24,7 @@ public:
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;   // latency-compensated bypass
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
@@ -96,6 +97,14 @@ private:
     std::unique_ptr<me::SpectralEngine> spectral = std::make_unique<me::SpectralEngine>();
     me::GlitchEngine glitch;
     me::ModEngine mod;
+    // Parameter smoothing: targets are set once per block, engines are updated every kSub samples.
+    static constexpr int kSub = 32;
+    struct Smoothers
+    {
+        juce::SmoothedValue<float> mix, out, formMix, damp, fb, spread, inharm, vowel, shift, res;
+        juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> cutoff, root;
+    } sm;
+    bool smoothingPrimed = false;
     float lastVelocity = 0.0f;
     int currentPreset = -1;
     juce::String currentPresetName { "Init" };

@@ -35,9 +35,9 @@ MutationEngineEditor::MutationEngineEditor (MutationEngineProcessor& p) : AudioP
         knobs[id] = std::make_unique<KnobComponent> (p, id, accent);
         content.addAndMakeVisible (*knobs[id]);
     }
-    knobs[pid::Mix]->setName ("MIX"); knobs[pid::Output]->setName ("OUT"); knobs[pid::FiltRes]->setName ("RES");
-    knobs[pid::FormMix]->setName ("F-MIX"); knobs[pid::FormShift]->setName ("SHIFT"); knobs[pid::ResFeed]->setName ("FEEDBACK");
-    knobs[pid::GlProb]->setName ("PROB"); knobs[pid::GlAmt]->setName ("AMOUNT"); knobs[pid::SpDrop]->setName ("DROPOUT"); knobs[pid::SpScram]->setName ("SCRAMBLE");
+    knobs[pid::Mix]->setLabel ("MIX"); knobs[pid::Output]->setLabel ("OUT"); knobs[pid::FiltRes]->setLabel ("RES");
+    knobs[pid::FormMix]->setLabel ("F-MIX"); knobs[pid::FormShift]->setLabel ("SHIFT"); knobs[pid::ResFeed]->setLabel ("FEEDBACK");
+    knobs[pid::GlProb]->setLabel ("PROB"); knobs[pid::GlAmt]->setLabel ("AMOUNT"); knobs[pid::SpDrop]->setLabel ("DROPOUT"); knobs[pid::SpScram]->setLabel ("SCRAMBLE");
 
     divSeg.onSelect = [this] (int i) { setChoice (pid::GlDiv, i); };
     filtSeg.onSelect = [this] (int i) { setChoice (pid::FiltType, i); };

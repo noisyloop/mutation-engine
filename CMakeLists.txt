@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(MutationEngine VERSION 0.1.0 LANGUAGES C CXX)
+project(MutationEngine VERSION 0.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,27 @@ if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
 endif()
 
+# Reproducible builds: the same sources, toolchain and pinned JUCE tag give the same binary regardless of
+# where the checkout lives, so build-directory and source paths are stripped from the output.
+if(NOT MSVC)
+  # JUCE bakes __DATE__/__TIME__ into juce_core (Time::getCompilationDate); pin them so two builds of the
+  # same commit are byte-identical. SOURCE_DATE_EPOCH (set by the release workflow) wins when present.
+  if(DEFINED ENV{SOURCE_DATE_EPOCH})
+    string(TIMESTAMP ME_BUILD_DATE "%b %e %Y" UTC)   # honours SOURCE_DATE_EPOCH
+    string(TIMESTAMP ME_BUILD_TIME "%H:%M:%S" UTC)
+  else()
+    set(ME_BUILD_DATE "Jan  1 2000")
+    set(ME_BUILD_TIME "00:00:00")
+  endif()
+  add_compile_options(
+    "-ffile-prefix-map=${CMAKE_SOURCE_DIR}=."
+    "-ffile-prefix-map=${CMAKE_BINARY_DIR}=_build"
+    "-Wno-builtin-macro-redefined"
+    "-D__DATE__=\"${ME_BUILD_DATE}\""
+    "-D__TIME__=\"${ME_BUILD_TIME}\"")
+endif()
+
+option(ME_COPY_PLUGIN "Copy the built plugin into the user's plugin folder after building" OFF)
 option(ME_BUILD_PLUGIN "Build the JUCE plugin (fetches JUCE)" ON)
 option(ME_BUILD_TESTS  "Build the JUCE-free DSP unit tests" ON)
 
@@ -71,7 +92,7 @@ if(ME_BUILD_PLUGIN)
     IS_SYNTH                FALSE
     NEEDS_MIDI_INPUT        TRUE
     NEEDS_MIDI_OUTPUT       FALSE
-    COPY_PLUGIN_AFTER_BUILD FALSE
+    COPY_PLUGIN_AFTER_BUILD ${ME_COPY_PLUGIN}
     VST3_CATEGORIES         Fx)
 
   # Factory presets are embedded in the binary.
@@ -111,12 +132,22 @@ if(ME_BUILD_PLUGIN)
   endif()
 
   # Renders the real editor to a PNG (used for the README screenshot).
-  option(ME_BUILD_SHOT_TOOL "Build the editor screenshot tool" ON)
+  option(ME_BUILD_SHOT_TOOL "Build the editor screenshot tool" OFF)
   if(ME_BUILD_SHOT_TOOL)
     juce_add_console_app(MutationEngineShot PRODUCT_NAME "MutationEngineShot")
     target_sources(MutationEngineShot PRIVATE Tests/ShotTool.cpp ${ME_PLUGIN_SOURCES})
     target_include_directories(MutationEngineShot PRIVATE Source)
     target_compile_definitions(MutationEngineShot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(MutationEngineShot PRIVATE me_dsp MutationEngineData juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
+  endif()
+
+  # Step 6 beta suite: latency, sample-rate/block-size matrix, automation, recall, safety, threads, CPU.
+  option(ME_BUILD_STRESS_TEST "Build the processor stress test" ON)
+  if(ME_BUILD_STRESS_TEST)
+    juce_add_console_app(MutationEngineStress PRODUCT_NAME "MutationEngineStress")
+    target_sources(MutationEngineStress PRIVATE Tests/ProcessorStressTest.cpp ${ME_PLUGIN_SOURCES})
+    target_include_directories(MutationEngineStress PRIVATE Source)
+    target_compile_definitions(MutationEngineStress PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(MutationEngineStress PRIVATE me_dsp MutationEngineData juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
   endif()
 endif()
