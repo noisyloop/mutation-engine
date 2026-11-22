@@ -157,6 +157,9 @@ void MutationEngineProcessor::prepareToPlay (double sr, int)
     dryPos = 0; lastSeed = -1; internalPpq = 0.0;
     setLatencySamples (me::SpectralEngine::latencySamples());   // constant in every mode
     mod.prepare (sr);
+    for (auto* v : { &sm.mix, &sm.out, &sm.formMix, &sm.damp, &sm.fb, &sm.spread, &sm.inharm, &sm.vowel, &sm.shift, &sm.res }) v->reset (sr, 0.02);
+    sm.cutoff.reset (sr, 0.02); sm.root.reset (sr, 0.03);
+    smoothingPrimed = false;
     heldNote = -1; midiRootHz = 0.0f;
 }
 
@@ -202,18 +205,29 @@ void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     const int filtType = (int) get (me::ids::filtType);
     me::ModEngine::safeguard (feedback, damping, filtRes, cutoff, filtType, dropout);   // modulation can't push past the safety limits
 
-    me::ResonatorBank::Params rp;
-    rp.rootHz     = mod.modulate (me::pid::ResRoot, (get (me::ids::midiTrack) > 0.5f && midiRootHz > 0.0f) ? midiRootHz : get (me::ids::resRoot));
-    rp.voices     = (int) get (me::ids::resVoices);
-    rp.inharmonic = M (me::pid::ResInharm);
-    rp.damping    = damping;
-    rp.feedback   = feedback;
-    rp.spread     = M (me::pid::ResSpread);
-    resonator.setParams (rp);
-    effRootHz.store (rp.rootHz, std::memory_order_relaxed);
+    // Targets for this block; the engines glide to them (20-30 ms) so mutations, preset loads,
+    // automation and block-rate modulation never produce zipper noise or clicks.
+    const float rootTarget = mod.modulate (me::pid::ResRoot, (get (me::ids::midiTrack) > 0.5f && midiRootHz > 0.0f) ? midiRootHz : get (me::ids::resRoot));
+    const float mixTarget = M (me::pid::Mix), formMixTarget = M (me::pid::FormMix);
+    const float outTarget = juce::Decibels::decibelsToGain (get (me::ids::output));
+    struct Target { juce::SmoothedValue<float>* v; float t; };
+    const Target targets[] = { { &sm.mix, mixTarget }, { &sm.out, outTarget }, { &sm.formMix, formMixTarget }, { &sm.damp, damping }, { &sm.fb, feedback },
+                               { &sm.spread, M (me::pid::ResSpread) }, { &sm.inharm, M (me::pid::ResInharm) }, { &sm.vowel, M (me::pid::Vowel) },
+                               { &sm.shift, M (me::pid::FormShift) }, { &sm.res, filtRes } };
+    if (! smoothingPrimed)
+    {
+        for (const auto& t : targets) t.v->setCurrentAndTargetValue (t.t);
+        sm.cutoff.setCurrentAndTargetValue (cutoff); sm.root.setCurrentAndTargetValue (rootTarget);
+        smoothingPrimed = true;
+    }
+    else
+    {
+        for (const auto& t : targets) t.v->setTargetValue (t.t);
+        sm.cutoff.setTargetValue (cutoff); sm.root.setTargetValue (rootTarget);
+    }
+    const int voices = (int) get (me::ids::resVoices);
+    effRootHz.store (rootTarget, std::memory_order_relaxed);
     effFeedback.store (feedback, std::memory_order_relaxed);
-    filter.set ((me::FilterBank::Type) filtType, cutoff, filtRes);
-    formant.set (M (me::pid::Vowel), M (me::pid::FormShift));
 
     const int mode = (int) get (me::ids::mode);   // 0 Resonate, 1 Glitch, 2 Phantom
 
@@ -249,17 +263,26 @@ void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
     glitch.setParams (gp);
     glitch.setPosition (ppq);
 
-    const float mix     = M (me::pid::Mix);
-    const float formMix = M (me::pid::FormMix);
-    const float outGain = juce::Decibels::decibelsToGain (get (me::ids::output));
     float peak = 0.0f;
 
     auto* L = buffer.getWritePointer (0);
     auto* R = buffer.getNumChannels() > 1 ? buffer.getWritePointer (1) : buffer.getWritePointer (0);
 
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    const int numSamples = buffer.getNumSamples();
+    for (int blockStart = 0; blockStart < numSamples; blockStart += kSub)
     {
-        const float dl = L[i], dr = R[i];
+    const int len = std::min (kSub, numSamples - blockStart);
+    me::ResonatorBank::Params rp;
+    rp.rootHz = sm.root.skip (len); rp.voices = voices; rp.inharmonic = sm.inharm.skip (len);
+    rp.damping = sm.damp.skip (len); rp.feedback = sm.fb.skip (len); rp.spread = sm.spread.skip (len);
+    resonator.setParams (rp);
+    filter.set ((me::FilterBank::Type) filtType, sm.cutoff.skip (len), sm.res.skip (len));
+    formant.set (sm.vowel.skip (len), sm.shift.skip (len));
+
+    for (int i = blockStart; i < blockStart + len; ++i)
+    {
+        const float mix = sm.mix.getNextValue(), formMix = sm.formMix.getNextValue(), outGain = sm.out.getNextValue();
+        const float dl = me::sanitize (L[i], 16.0f), dr = me::sanitize (R[i], 16.0f);   // NaN/Inf from a host never reaches filter state
         float wl = dl, wr = dr;
         if (mode == 0) resonator.process (dl, dr, wl, wr);
         else if (mode == 1) glitch.process (wl, wr);
@@ -290,12 +313,32 @@ void MutationEngineProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         scope[p].store (0.5f * (ol + or_), std::memory_order_relaxed);
         scopePos.store ((p + 1) % kScopeSize, std::memory_order_relaxed);
     }
+    }   // sub-blocks
 
     outPeak.store (std::max (peak, outPeak.load() * 0.9f), std::memory_order_relaxed);
 
     const double blockMs = 1000.0 * buffer.getNumSamples() / sampleRate;
     const float load = (float) ((juce::Time::getMillisecondCounterHiRes() - t0) / std::max (0.001, blockMs));
     cpuLoad.store (0.95f * cpuLoad.load() + 0.05f * load, std::memory_order_relaxed);
+}
+
+void MutationEngineProcessor::processBlockBypassed (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+{
+    // Pass the input through the same delay as the wet path so bypass does not shift timing.
+    for (int c = getTotalNumInputChannels(); c < getTotalNumOutputChannels(); ++c) buffer.clear (c, 0, buffer.getNumSamples());
+    const int n = buffer.getNumSamples(), chans = std::min (2, buffer.getNumChannels());
+    const int size = (int) dryDelay[0].size();
+    for (int i = 0; i < n; ++i)
+    {
+        for (int c = 0; c < chans; ++c)
+        {
+            auto& d = dryDelay[(size_t) c];
+            const float in = buffer.getSample (c, i);
+            buffer.setSample (c, i, d[(size_t) dryPos]);
+            d[(size_t) dryPos] = in;
+        }
+        dryPos = (dryPos + 1) % size;
+    }
 }
 
 void MutationEngineProcessor::getStateInformation (juce::MemoryBlock& dest)
