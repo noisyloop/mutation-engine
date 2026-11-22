@@ -1,0 +1,15 @@
+# Mutation Engine preset
+name: Ghost Choir
+category: Phantom
+author: NoisyLoop
+description: Frozen spectrum with formants and wandering partials.
+mode = 2
+spec_drift = 0.8
+spec_shift = 5
+vowel = 1
+formant_mix = 0.6
+mix = 0.8
+rnd_rate = 0.5
+mod1_src = 4
+mod1_dst = 13
+mod1_amt = 0.3

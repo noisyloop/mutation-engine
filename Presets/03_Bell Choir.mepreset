@@ -1,0 +1,19 @@
+# Mutation Engine preset
+name: Bell Choir
+category: Resonate
+author: NoisyLoop
+description: Inharmonic bell partials, wide stereo.
+res_root = 330
+res_voices = 24
+res_inharm = 0.55
+res_damp = 0.3
+res_feedback = 0.2
+res_spread = 0.85
+vowel = 3
+formant_mix = 0.2
+filt_cutoff = 11000
+mix = 0.75
+lfo2_rate = 0.2
+mod1_src = 2
+mod1_dst = 5
+mod1_amt = 0.3

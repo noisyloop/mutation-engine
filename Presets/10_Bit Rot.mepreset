@@ -1,0 +1,14 @@
+# Mutation Engine preset
+name: Bit Rot
+category: Glitch
+author: NoisyLoop
+description: Fast 1/32 events with crushed, scrambled bins.
+mode = 1
+glitch_div = 3
+glitch_prob = 0.7
+glitch_amount = 0.9
+spec_shift = 7
+spec_dropout = 0.35
+spec_scramble = 0.3
+filt_cutoff = 8000
+mix = 1.0

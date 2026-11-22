@@ -6,6 +6,8 @@
 #include "DSP/SpectralEngine.h"
 #include "DSP/GlitchEngine.h"
 #include "Parameters.h"
+#include "DSP/ModEngine.h"
+#include "Presets/PresetManager.h"
 #include "Mutation/Mutator.h"
 #include "Mutation/UndoStack.h"
 #include <atomic>
@@ -30,10 +32,10 @@ public:
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     double getTailLengthSeconds() const override { return 6.0; }
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram (int) override {}
-    const juce::String getProgramName (int) override { return {}; }
+    int getNumPrograms() override { return std::max (1, presets.size()); }
+    int getCurrentProgram() override { return std::max (0, currentPreset); }
+    void setCurrentProgram (int i) override { loadPreset (i); }
+    const juce::String getProgramName (int i) override { return i >= 0 && i < presets.size() ? juce::String (presets.get (i).preset.name) : juce::String(); }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock&) override;
@@ -59,8 +61,20 @@ public:
     void applyState (const me::MutationState&);
     float getCpuLoad() const { return cpuLoad.load(); }
 
+    // ---- presets (message thread) ------------------------------------------
+    PresetManager presets;
+    void loadPreset (int index);                       // undoable
+    bool saveUserPreset (const juce::String& name, const juce::String& category);
+    int  getCurrentPresetIndex() const { return currentPreset; }
+    juce::String getCurrentPresetName() const { return currentPresetName; }
+
+    // ---- live values for the UI (written on the audio thread) ---------------
+    std::atomic<float> modSource[me::ModEngine::kNumSources] {};
+    std::atomic<float> effRootHz { 110.0f }, effFeedback { 0.0f }, outPeak { 0.0f };
+    double getSampleRate() const { return sampleRate; }
+
     // Lock-free tap of the output for the editor's scope/spectrum.
-    static constexpr int kScopeSize = 2048;
+    static constexpr int kScopeSize = 4096;
     std::atomic<float> scope[kScopeSize] {};
     std::atomic<int> scopePos { 0 };
 
@@ -81,6 +95,10 @@ private:
     me::FormantEngine formant;
     std::unique_ptr<me::SpectralEngine> spectral = std::make_unique<me::SpectralEngine>();
     me::GlitchEngine glitch;
+    me::ModEngine mod;
+    float lastVelocity = 0.0f;
+    int currentPreset = -1;
+    juce::String currentPresetName { "Init" };
     std::vector<float> dryDelay[2];     // aligns dry with the latency of the spectral stage
     int dryPos = 0, lastSeed = -1;
     double internalPpq = 0.0;           // free-running musical clock when the host is stopped

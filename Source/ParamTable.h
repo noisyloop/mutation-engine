@@ -25,6 +25,10 @@ enum : int
     // ---- control parameters: never part of a sound snapshot
     MutIntensity, MutStyle, MutMorph,
     LockRes, LockForm, LockFilt, LockSpec, LockGl,
+    // ---- modulation: sources and four assignment slots (src, dst, amount)
+    Lfo1Rate, Lfo1Shape, Lfo2Rate, Lfo2Shape, RndRate,
+    Mod1Src, Mod1Dst, Mod1Amt, Mod2Src, Mod2Dst, Mod2Amt,
+    Mod3Src, Mod3Dst, Mod3Amt, Mod4Src, Mod4Dst, Mod4Amt,
     kNumParams
 };
 }
@@ -43,6 +47,11 @@ struct ParamInfo
     Group group;
     bool  mutates;         // may be changed by MUTATE
 };
+
+#define MOD_SLOT(n) \
+    { "mod" #n "_src", "Mod " #n " Source", Kind::Choice, 0, 5, 0, 1, "None|LFO 1|LFO 2|Envelope|Random|Velocity", "", Group::Control, false }, \
+    { "mod" #n "_dst", "Mod " #n " Target", Kind::Choice, 0, 15, 0, 1, "None|Root|Inharmonic|Damping|Feedback|Spread|Cutoff|Filter Res|Vowel|Formant Shift|Formant Mix|Mix|Glitch Prob|Drift|Dropout|Scramble", "", Group::Control, false }, \
+    { "mod" #n "_amt", "Mod " #n " Amount", Kind::Float, -1, 1, 0, 1, "", "", Group::Control, false },
 
 inline constexpr ParamInfo kParams[kNumParams] = {
     { "mode",          "Mode",               Kind::Choice, 0, 2, 0, 1, "Resonate|Glitch|Phantom", "", Group::Global, false },
@@ -84,6 +93,13 @@ inline constexpr ParamInfo kParams[kNumParams] = {
     { "lock_filter",   "Lock Filter",        Kind::Bool,   0, 1, 0, 1, "", "", Group::Control, false },
     { "lock_spectral", "Lock Spectral",      Kind::Bool,   0, 1, 0, 1, "", "", Group::Control, false },
     { "lock_glitch",   "Lock Glitch",        Kind::Bool,   0, 1, 0, 1, "", "", Group::Control, false },
+
+    { "lfo1_rate",     "LFO 1 Rate",         Kind::Float,  0.05f, 20, 1.0f, 0.4f, "", "Hz", Group::Control, false },
+    { "lfo1_shape",    "LFO 1 Shape",        Kind::Choice, 0, 3, 0, 1, "Sine|Triangle|Saw|Square", "", Group::Control, false },
+    { "lfo2_rate",     "LFO 2 Rate",         Kind::Float,  0.05f, 20, 0.25f, 0.4f, "", "Hz", Group::Control, false },
+    { "lfo2_shape",    "LFO 2 Shape",        Kind::Choice, 0, 3, 1, 1, "Sine|Triangle|Saw|Square", "", Group::Control, false },
+    { "rnd_rate",      "Random Rate",        Kind::Float,  0.1f, 16, 2.0f, 0.4f, "", "Hz", Group::Control, false },
+    MOD_SLOT (1) MOD_SLOT (2) MOD_SLOT (3) MOD_SLOT (4)
 };
 
 // Value <-> normalised (0..1), mirroring juce::NormalisableRange semantics.
@@ -112,6 +128,14 @@ inline int findParam (const char* id) noexcept
     for (int i = 0; i < kNumParams; ++i) if (std::strcmp (kParams[i].id, id) == 0) return i;
     return -1;
 }
+
+// Modulation destinations, in the order of the "mod*_dst" choice list (index 0 = None).
+inline constexpr int kNumModDsts = 16;
+inline constexpr int kModDst[kNumModDsts] = {
+    -1, pid::ResRoot, pid::ResInharm, pid::ResDamp, pid::ResFeed, pid::ResSpread, pid::FiltCutoff, pid::FiltRes,
+    pid::Vowel, pid::FormShift, pid::FormMix, pid::Mix, pid::GlProb, pid::SpDrift, pid::SpDrop, pid::SpScram };
+inline constexpr int kNumModSlots = 4;
+inline constexpr int modSlotParam (int slot, int field) noexcept { return pid::Mod1Src + slot * 3 + field; }   // field 0 src, 1 dst, 2 amt
 
 inline int numChoices (int i) noexcept { return (int) kParams[i].max + 1; }
 } // namespace me

@@ -1,0 +1,18 @@
+# Mutation Engine preset
+name: Choir of Wires
+category: Vocal
+author: NoisyLoop
+description: Shifted formants over a tuned bank.
+res_root = 196
+res_voices = 16
+res_damp = 0.5
+res_feedback = 0.15
+res_spread = 0.7
+vowel = 2
+formant_shift = 1.15
+formant_mix = 0.85
+mix = 0.85
+lfo2_rate = 0.35
+mod1_src = 2
+mod1_dst = 9
+mod1_amt = 0.3

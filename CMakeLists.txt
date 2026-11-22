@@ -36,6 +36,14 @@ if(ME_BUILD_TESTS)
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
     $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>)
   add_test(NAME mutation COMMAND me_mutation_tests)
+
+  add_executable(me_preset_tests Tests/PresetTests.cpp)
+  target_link_libraries(me_preset_tests PRIVATE me_dsp)
+  target_compile_definitions(me_preset_tests PRIVATE ME_PRESET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Presets")
+  target_compile_options(me_preset_tests PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>)
+  add_test(NAME presets COMMAND me_preset_tests)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -66,9 +74,12 @@ if(ME_BUILD_PLUGIN)
     COPY_PLUGIN_AFTER_BUILD FALSE
     VST3_CATEGORIES         Fx)
 
-  target_sources(MutationEngine PRIVATE
-    Source/PluginProcessor.cpp
-    Source/PluginEditor.cpp)
+  # Factory presets are embedded in the binary.
+  file(GLOB ME_FACTORY_PRESETS CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Presets/*.mepreset)
+  juce_add_binary_data(MutationEngineData SOURCES ${ME_FACTORY_PRESETS})
+  set(ME_PLUGIN_SOURCES Source/PluginProcessor.cpp Source/PluginEditor.cpp Source/Presets/PresetManager.cpp)
+
+  target_sources(MutationEngine PRIVATE ${ME_PLUGIN_SOURCES})
 
   target_compile_definitions(MutationEngine PUBLIC
     JUCE_WEB_BROWSER=0
@@ -78,6 +89,7 @@ if(ME_BUILD_PLUGIN)
   target_link_libraries(MutationEngine
     PRIVATE
       me_dsp
+      MutationEngineData
       juce::juce_audio_utils
       juce::juce_dsp
     PUBLIC
@@ -89,12 +101,22 @@ if(ME_BUILD_PLUGIN)
   if(ME_BUILD_SMOKE_TEST)
     juce_add_console_app(MutationEngineSmoke PRODUCT_NAME "MutationEngineSmoke")
     target_sources(MutationEngineSmoke PRIVATE
-      Tests/ProcessorSmokeTest.cpp Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+      Tests/ProcessorSmokeTest.cpp ${ME_PLUGIN_SOURCES})
     target_include_directories(MutationEngineSmoke PRIVATE Source)
     target_compile_definitions(MutationEngineSmoke PRIVATE
       JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(MutationEngineSmoke PRIVATE
-      me_dsp juce::juce_audio_utils juce::juce_dsp
+      me_dsp MutationEngineData juce::juce_audio_utils juce::juce_dsp
       juce::juce_recommended_config_flags)
+  endif()
+
+  # Renders the real editor to a PNG (used for the README screenshot).
+  option(ME_BUILD_SHOT_TOOL "Build the editor screenshot tool" ON)
+  if(ME_BUILD_SHOT_TOOL)
+    juce_add_console_app(MutationEngineShot PRODUCT_NAME "MutationEngineShot")
+    target_sources(MutationEngineShot PRIVATE Tests/ShotTool.cpp ${ME_PLUGIN_SOURCES})
+    target_include_directories(MutationEngineShot PRIVATE Source)
+    target_compile_definitions(MutationEngineShot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(MutationEngineShot PRIVATE me_dsp MutationEngineData juce::juce_audio_utils juce::juce_dsp juce::juce_recommended_config_flags)
   endif()
 endif()
