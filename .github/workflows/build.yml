@@ -1,0 +1,23 @@
+name: build
+on: [push, pull_request]
+jobs:
+  dsp-tests:
+    strategy:
+      matrix: { os: [ubuntu-24.04, macos-14] }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DME_BUILD_PLUGIN=OFF -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build --config Release
+      - run: ctest --test-dir build --output-on-failure
+  plugin:
+    strategy:
+      matrix: { os: [ubuntu-24.04, macos-14] }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libfreetype6-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libgl1-mesa-dev
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DME_BUILD_TESTS=OFF
+      - run: cmake --build build --config Release --target MutationEngine_VST3 -j 4

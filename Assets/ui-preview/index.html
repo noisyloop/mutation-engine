@@ -1,0 +1,160 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Mutation Engine UI</title>
+<style>
+:root{--bg:#05060c;--panel:#0b0d18;--line:#1b2036;--tx:#e8ecff;--dim:#6d7599;--cy:#00e5ff;--mg:#ff2e93;--vi:#8a5cff;--am:#ffb02e;--ok:#34ffb0}
+*{box-sizing:border-box;margin:0}
+body{width:1600px;height:1000px;background:radial-gradient(1200px 700px at 50% -10%,#141a3a 0%,#080a15 55%,#04050a 100%);color:var(--tx);font:12px/1.2 "Inter","Helvetica Neue",Arial,sans-serif;overflow:hidden;position:relative}
+body:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.012) 0 1px,transparent 1px 3px);pointer-events:none;z-index:9}
+.mono{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace}
+header{height:62px;display:flex;align-items:center;gap:22px;padding:0 24px;border-bottom:1px solid var(--line);background:linear-gradient(#0d1020,#080a14)}
+.logo{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:.32em;font-size:16px}
+.logo b{background:linear-gradient(90deg,var(--cy),var(--mg));-webkit-background-clip:text;color:transparent}
+.preset{flex:0 0 330px;margin-left:10px;height:36px;border:1px solid var(--line);border-radius:10px;background:#090b16;display:flex;align-items:center;padding:0 14px;gap:12px;box-shadow:inset 0 0 20px rgba(0,229,255,.05)}
+.preset .n{flex:1;text-align:center;font-weight:600;letter-spacing:.04em}.preset i{color:var(--dim);font-style:normal;font-size:15px}
+.preset small{color:var(--dim);font-size:10px;letter-spacing:.12em}
+.pill,.meter div,.meter span{white-space:nowrap}.pill{padding:7px 12px;border:1px solid var(--line);border-radius:8px;color:var(--dim);font-size:11px;letter-spacing:.1em;background:#090b16}
+.pill.on{color:var(--cy);border-color:#0b5662;box-shadow:0 0 14px rgba(0,229,255,.18)}
+.sp{flex:1}
+.meter{display:flex;gap:16px;align-items:center;color:var(--dim);font-size:10px;letter-spacing:.14em}
+.meter div{display:flex;align-items:center;gap:8px}.bar{width:70px;height:5px;border-radius:3px;background:#12162a;overflow:hidden}.bar u{display:block;height:100%;background:linear-gradient(90deg,var(--ok),var(--cy))}
+.modes{display:flex;gap:10px;padding:14px 24px 0}
+.mode{padding:10px 22px;border-radius:10px;border:1px solid var(--line);background:#090b16;letter-spacing:.2em;font-size:11px;font-weight:700;color:var(--dim);display:flex;gap:9px;align-items:center}
+.mode em{font-style:normal;font-size:8px;border:1px solid #2a3050;border-radius:4px;padding:2px 4px;letter-spacing:.1em}
+.mode.on{color:#fff;border-color:var(--cy);background:linear-gradient(180deg,rgba(0,229,255,.16),rgba(0,229,255,.03));box-shadow:0 0 24px rgba(0,229,255,.28),inset 0 0 18px rgba(0,229,255,.1)}
+.mode.off{opacity:.45}
+main{display:grid;grid-template-columns:330px 1fr 330px;gap:14px;padding:14px 24px;height:640px}
+.panel{background:linear-gradient(180deg,#0d1020,#090b16);border:1px solid var(--line);border-radius:14px;padding:14px;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.panel h3{font-size:10px;letter-spacing:.26em;color:var(--dim);font-weight:700;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.panel h3 span{color:var(--cy)}
+.knobs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 0}
+.knob{text-align:center;position:relative}.knob svg{display:block;margin:0 auto}
+.knob .l{font-size:9px;letter-spacing:.18em;color:var(--dim);margin-top:-4px}.knob .v{font-size:11px;margin-top:3px;color:var(--tx)}
+.lock{position:absolute;top:2px;right:14px;font-size:10px;color:#2a3354}.lock.on{color:var(--am);text-shadow:0 0 8px var(--am)}
+.center{display:flex;flex-direction:column;gap:14px}
+.display{flex:1;position:relative;padding:0;overflow:hidden;border-color:#1f2850}
+canvas{display:block;width:100%;height:100%}
+.dtag{position:absolute;z-index:3;font-size:10px;letter-spacing:.2em;color:var(--dim)}
+.dtag b{color:var(--cy);font-weight:600}
+.scopebox{height:132px;padding:0;overflow:hidden}
+.right{display:flex;flex-direction:column;gap:14px}
+.vowel{height:250px}.filt{height:150px}
+.mods{flex:1}
+.mod{display:grid;grid-template-columns:62px 1fr 38px;gap:8px;align-items:center;font-size:10px;margin-bottom:9px;letter-spacing:.08em}
+.mod .t{height:6px;background:#12162a;border-radius:3px;position:relative}.mod .t u{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.mod span{color:var(--dim)}
+footer{display:grid;grid-template-columns:330px 1fr 330px;gap:14px;padding:0 24px;height:210px}
+.mut{display:flex;align-items:center;justify-content:center;flex-direction:column}
+.big{width:150px;height:150px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 35% 30%,#ff5fb0,#ff2e93 40%,#8a1a9c 100%);box-shadow:0 0 50px rgba(255,46,147,.6),0 0 120px rgba(138,92,255,.35),inset 0 -10px 30px rgba(0,0,0,.4),inset 0 6px 14px rgba(255,255,255,.35);font-weight:900;letter-spacing:.2em;font-size:15px;color:#fff;text-shadow:0 0 12px rgba(255,255,255,.6)}
+.big:before,.big:after{content:"";position:absolute;inset:-14px;border-radius:50%;border:1px solid rgba(255,46,147,.45)}.big:after{inset:-30px;border-color:rgba(138,92,255,.25)}
+.seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:6px}
+.seg div{flex:1;text-align:center;padding:8px 0;font-size:10px;letter-spacing:.16em;color:var(--dim);background:#090b16}
+.seg .on{color:#fff;background:linear-gradient(180deg,rgba(255,46,147,.35),rgba(255,46,147,.1));box-shadow:inset 0 0 14px rgba(255,46,147,.3)}
+.row{display:flex;gap:14px;align-items:center}
+.hist{display:flex;gap:6px;margin-top:10px;align-items:center;color:var(--dim);font-size:10px;letter-spacing:.14em}
+.hist u{width:16px;height:16px;border-radius:5px;background:#12162a;border:1px solid #232a4a}.hist u.c{background:linear-gradient(135deg,var(--mg),var(--vi));border:0;box-shadow:0 0 10px var(--mg)}
+.morph{margin-top:8px}.morph .rail{height:8px;border-radius:4px;background:linear-gradient(90deg,var(--cy),var(--vi),var(--mg));position:relative;margin:12px 6px}
+.morph .rail i{position:absolute;left:58%;top:-8px;width:22px;height:22px;margin-left:-11px;border-radius:50%;background:#fff;box-shadow:0 0 18px #fff,0 0 40px var(--vi)}
+.morph .ab{display:flex;justify-content:space-between;font-size:10px;letter-spacing:.18em;color:var(--dim)}
+</style></head><body>
+<header>
+ <div class="logo"><svg width="30" height="30" viewBox="0 0 30 30"><defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#00e5ff"/><stop offset="1" stop-color="#ff2e93"/></linearGradient></defs><path d="M2 15 Q6 2 9 15 T16 15 T22 15 T28 15" fill="none" stroke="url(#lg)" stroke-width="2.4" stroke-linecap="round"/><circle cx="15" cy="15" r="13" fill="none" stroke="url(#lg)" stroke-opacity=".35"/></svg><b>MUTATION</b>ENGINE</div>
+ <div class="preset"><i>‹</i><div class="n">Glass Throat <small>· ORGANIC</small></div><i>›</i></div>
+ <div class="pill">↶ UNDO</div><div class="pill">↷ REDO</div><div class="pill on">MIDI PITCH · A2</div>
+ <div class="sp"></div>
+ <div class="meter"><div>CPU <span class="bar"><u style="width:14%"></u></span><span class="mono" style="color:var(--tx)">6.4%</span></div><div>LATENCY <span class="mono" style="color:var(--tx)">1024 smp</span></div><div>SAFETY <span class="mono" style="color:var(--ok)">● FB SAFE</span></div><div>OUT <span class="bar"><u style="width:72%"></u></span><span class="mono" style="color:var(--tx)">-3.1</span></div></div>
+</header>
+<div class="modes">
+ <div class="mode on">◉ RESONATE</div><div class="mode">▦ GLITCH</div><div class="mode">❄ PHANTOM</div>
+ <div class="mode off">FRACTAL <em>P1</em></div><div class="mode off">LIQUEFY <em>P1</em></div><div class="mode off">COLLAPSE <em>P1</em></div>
+</div>
+<main>
+ <section class="panel"><h3>RESONATOR BANK <span>32 VOICES</span></h3><div class="knobs" id="k1"></div>
+  <h3 style="margin-top:18px">FORMANT</h3><div class="knobs" id="k2"></div>
+  <h3 style="margin-top:18px">FILTER · OUTPUT</h3><div class="knobs" id="k3"></div></section>
+ <section class="center">
+  <div class="panel display"><div class="dtag" style="left:16px;top:12px">LIVE SPECTROGRAM <b>· 20 Hz – 20 kHz</b></div><div class="dtag mono" style="right:16px;top:12px"><b>● IN</b> drum loop &nbsp; <b style="color:var(--mg)">● RESONANCES</b> 32</div><canvas id="spec"></canvas></div>
+  <div class="panel scopebox"><div class="dtag" style="left:16px;top:10px">OUTPUT</div><canvas id="scope"></canvas></div>
+ </section>
+ <section class="right">
+  <div class="panel vowel"><h3>VOWEL SHAPE <span>A → E · 38%</span></h3><canvas id="vow" style="height:200px"></canvas></div>
+  <div class="panel filt"><h3>FILTER <span>LOW-PASS · 2.4 kHz</span></h3><canvas id="flt" style="height:96px"></canvas></div>
+  <div class="panel mods"><h3>MODULATION</h3>
+   <div class="mod"><span>LFO 1</span><div class="t"><u style="width:62%;background:var(--cy)"></u></div><span class="mono">+34%</span></div>
+   <div class="mod"><span>ENV</span><div class="t"><u style="width:80%;background:var(--vi)"></u></div><span class="mono">+62%</span></div>
+   <div class="mod"><span>RANDOM</span><div class="t"><u style="width:30%;background:var(--mg)"></u></div><span class="mono">+18%</span></div>
+   <div class="mod"><span>MIDI VEL</span><div class="t"><u style="width:45%;background:var(--am)"></u></div><span class="mono">+27%</span></div></div>
+ </section>
+</main>
+<footer>
+ <section class="panel"><h3>MUTATION <span>INTENSITY 64%</span></h3>
+  <div class="seg"><div>ORGANIC</div><div class="on">DIGITAL</div><div>UNSTABLE</div></div>
+  <div class="hist">HISTORY <u></u><u></u><u></u><u class="c"></u><u></u></div>
+  <div class="hist" style="margin-top:14px">SEED <span class="mono" style="color:var(--tx);letter-spacing:.06em">0x7F3A·91C2</span> &nbsp;<span style="color:var(--cy)">⚄ REROLL</span></div></section>
+ <section class="panel mut" style="flex-direction:row;gap:60px"><div style="text-align:right;color:var(--dim);font-size:10px;letter-spacing:.18em;line-height:2">LOCKED<br><b style="color:var(--am)">FILTER · VOWEL</b><br>MUTATING<br><b style="color:var(--tx)">RES · SPECTRAL</b></div><div class="big">MUTATE</div><div style="color:var(--dim);font-size:10px;letter-spacing:.18em;line-height:2">PEAK<br><b class="mono" style="color:var(--ok)">-1.2 dBFS</b><br>FEEDBACK LIMIT<br><b class="mono" style="color:var(--ok)">0.92 · SAFE</b></div></section>
+ <section class="panel"><h3>MORPH <span>A ↔ B</span></h3>
+  <div class="morph"><div class="ab"><span style="color:var(--cy)">A · GLASS THROAT</span><span style="color:var(--mg)">B · RUST CHOIR</span></div><div class="rail"><i></i></div><div class="ab"><span class="mono">seed 7F3A91C2</span><span class="mono">seed 2C0DE511</span></div></div>
+  <canvas id="bars" style="height:70px;margin-top:6px"></canvas></section>
+</footer>
+<script>
+let s=1337;const R=()=>(s=(s*1664525+1013904223)>>>0)/4294967296;
+// ---- knobs
+function knob(v,label,txt,lock,col){const a0=-225,a1=45,a=a0+(a1-a0)*v,r=27,c=36;const p=d=>{const t=d*Math.PI/180;return[c+r*Math.cos(t),c+r*Math.sin(t)]};
+ const arc=(x,y)=>{const[A,B]=[p(x),p(y)];return`M${A[0]} ${A[1]}A${r} ${r} 0 ${y-x>180?1:0} 1 ${B[0]} ${B[1]}`};const pt=p(a),id='g'+Math.random().toString(36).slice(2,6);
+ return`<div class="knob"><span class="lock ${lock?'on':''}">${lock?'🔒':'⌂'}</span><svg width="72" height="72"><defs><linearGradient id="${id}"><stop offset="0" stop-color="${col||'#00e5ff'}"/><stop offset="1" stop-color="#ff2e93"/></linearGradient><filter id="f${id}"><feGaussianBlur stdDeviation="2.2"/></filter><radialGradient id="b${id}" cx=".35" cy=".3"><stop offset="0" stop-color="#2a3156"/><stop offset="1" stop-color="#0a0c18"/></radialGradient></defs>
+ <circle cx="${c}" cy="${c}" r="19" fill="url(#b${id})" stroke="#262d52"/><path d="${arc(a0,a1)}" stroke="#171c33" stroke-width="4" fill="none" stroke-linecap="round"/>
+ <path d="${arc(a0,a)}" stroke="url(#${id})" stroke-width="4" fill="none" stroke-linecap="round" filter="url(#f${id})" opacity=".9"/><path d="${arc(a0,a)}" stroke="url(#${id})" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+ <line x1="${c}" y1="${c}" x2="${c+16*Math.cos(a*Math.PI/180)}" y2="${c+16*Math.sin(a*Math.PI/180)}" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg><div class="l">${label}</div><div class="v mono">${txt}</div></div>`}
+k1.innerHTML=[[.42,'ROOT','110 Hz'],[.5,'VOICES','16'],[.64,'INHARM','64%',0,'#8a5cff'],[.38,'DAMP','38%'],[.55,'FEEDBACK','55%',0,'#ffb02e'],[.72,'SPREAD','72%']].map(a=>knob(...a)).join('');
+k3.innerHTML=[[.62,'CUTOFF','2.4 kHz',0,'#00e5ff'],[.34,'RES','4.1'],[.7,'MIX','70%']].map(a=>knob(...a)).join('');
+k2.innerHTML=[[.38,'VOWEL','A→E'],[.5,'SHIFT','1.00×',1],[.66,'F-MIX','66%',1]].map(a=>knob(...a)).join('');
+function fit(c){const w=c.clientWidth,h=c.clientHeight;c.width=w*2;c.height=h*2;const x=c.getContext('2d');x.scale(2,2);return[x,w,h]}
+// ---- spectrogram
+(()=>{const c=spec,[x,w,h]=fit(c);const W=w,H=h;const img=x.createImageData(W,H);const fx=u=>20*Math.pow(1000,u);
+ const LR=[];const roots=[];for(let i=1;i<=32;i++){const B=.012;roots.push(110*i*Math.sqrt(1+B*i*i));LR.push(Math.log(roots[i-1]))}
+ const hits=[.06,.17,.28,.39,.5,.61,.72,.83,.94];const lut=t=>{t=Math.max(0,Math.min(1,t));const st=[[0,[4,5,14]],[.18,[40,12,90]],[.4,[150,25,150]],[.62,[255,46,120]],[.82,[255,170,60]],[1,[255,250,230]]];for(let i=1;i<st.length;i++)if(t<=st[i][0]){const u=(t-st[i-1][0])/(st[i][0]-st[i-1][0]);return st[i-1][1].map((v,k)=>v+(st[i][1][k]-v)*u)}return st[5][1]};
+ for(let py=0;py<H;py++){const ty=py/H;let hit=0;for(const t of hits){const d=ty-t;if(d>0)hit=Math.max(hit,Math.exp(-d*22))}
+  const kick=Math.max(0,Math.exp(-((ty-.06)%.22)*30));
+  for(let px=0;px<W;px++){const u=px/W,f=fx(u);let e=.03+.05*Math.exp(-u*2);
+   // broadband drum transient, tilted
+   e+=hit*(.35*Math.exp(-u*1.6)+.18*(Math.sin(px*.7+py*.31)*.5+.5)*(u>.45?1:.3));
+   // sustained resonator ridges, modulated per partial by hits
+   const lf=Math.log(f);for(let k=0;k<32;k++){const d=(lf-LR[k])*14;if(d>3||d<-3)continue;e+=Math.exp(-d*d)*(.55/(1+k*.12))*(.35+.65*Math.min(1,hit*1.6+.25+.25*Math.sin(ty*9+k)))}
+   // phantom drifting partials
+   const df=Math.log(f/(1800+700*Math.sin(ty*5)))*10;e+=Math.exp(-df*df)*.18;
+   e+=.025*(Math.random()-.5);const[cr,cg,cb]=lut(e*1.15);const i=(py*W+px)*4;img.data[i]=cr;img.data[i+1]=cg;img.data[i+2]=cb;img.data[i+3]=255}}
+ const oc=document.createElement('canvas');oc.width=W;oc.height=H;oc.getContext('2d').putImageData(img,0,0);x.imageSmoothingQuality='high';x.drawImage(oc,0,0,w,h);
+ // grid
+ x.strokeStyle='rgba(255,255,255,.07)';x.fillStyle='rgba(200,210,255,.45)';x.font='9px monospace';x.lineWidth=1;
+ [50,100,200,500,1e3,2e3,5e3,1e4].forEach(f=>{const u=Math.log(f/20)/Math.log(1000),px=u*w;x.beginPath();x.moveTo(px,0);x.lineTo(px,h);x.stroke();x.fillText(f>=1e3?f/1e3+'k':f,px+3,h-6)});
+ // live spectrum overlay
+ const base=h-22;x.beginPath();const pts=[];for(let px=0;px<=w;px+=2){const u=px/w,f=fx(u);let e=.08*Math.exp(-u*2);for(let k=0;k<32;k++){const d=Math.log(f/roots[k])*14;e+=Math.exp(-d*d)*(.9/(1+k*.1))}e+=.05*Math.abs(Math.sin(px*.4))*Math.exp(-u*1.5);pts.push([px,base-e*(h*.34)])}
+ x.moveTo(0,base);pts.forEach(p=>x.lineTo(...p));x.lineTo(w,base);const g=x.createLinearGradient(0,base-h*.34,0,base);g.addColorStop(0,'rgba(0,229,255,.55)');g.addColorStop(1,'rgba(0,229,255,0)');x.fillStyle=g;x.fill();
+ x.beginPath();pts.forEach((p,i)=>i?x.lineTo(...p):x.moveTo(...p));x.shadowColor='#00e5ff';x.shadowBlur=12;x.strokeStyle='#7ff3ff';x.lineWidth=1.6;x.stroke();x.shadowBlur=0;
+ // resonance markers
+ roots.forEach((f,k)=>{const px=Math.log(f/20)/Math.log(1000)*w;if(px>w)return;x.fillStyle='rgba(255,46,147,.9)';x.shadowColor='#ff2e93';x.shadowBlur=8;x.beginPath();x.moveTo(px,34);x.lineTo(px-3.5,28);x.lineTo(px+3.5,28);x.fill();x.shadowBlur=0;x.fillStyle='rgba(255,46,147,.12)';x.fillRect(px-.5,34,1,h-60)});
+ // vowel formant band
+ [[800,'F1'],[1150,'F2'],[2900,'F3']].forEach(([f,l])=>{const px=Math.log((f*.82)/20)/Math.log(1000)*w;x.strokeStyle='rgba(138,92,255,.9)';x.setLineDash([3,4]);x.beginPath();x.moveTo(px,46);x.lineTo(px,h-24);x.stroke();x.setLineDash([]);x.fillStyle='#b9a2ff';x.font='bold 9px monospace';x.fillText(l,px+4,58)});
+})();
+// ---- scope
+(()=>{const[x,w,h]=fit(scope);x.fillStyle='rgba(255,255,255,.02)';x.fillRect(0,0,w,h);x.strokeStyle='rgba(255,255,255,.06)';x.beginPath();x.moveTo(0,h/2);x.lineTo(w,h/2);x.stroke();
+ const draw=(col,amp,ph,w2)=>{x.beginPath();for(let i=0;i<w;i++){const t=i/w;let v=0;for(let k=1;k<=6;k++)v+=Math.sin(t*(k*34+ph)+k*1.3)/(k**1.2)*(k%2?1:.6);v*=amp*Math.exp(-((t*6)%1)*1.5)*(.5+.5*Math.sin(t*20));i?x.lineTo(i,h/2+v*h*.14):x.moveTo(i,h/2+v*h*.14)}x.shadowColor=col;x.shadowBlur=10;x.strokeStyle=col;x.lineWidth=w2;x.stroke();x.shadowBlur=0};
+ draw('rgba(138,92,255,.7)',1.1,3,1.2);draw('#00e5ff',1,0,1.6);
+ x.font='9px monospace';x.fillStyle='#6d7599';x.fillText('L',w-30,h/2-34);x.fillText('R',w-30,h/2+44)})();
+// ---- vowel chart
+(()=>{const[x,w,h]=fit(vow);x.strokeStyle='rgba(255,255,255,.06)';for(let i=1;i<5;i++){x.beginPath();x.moveTo(i*w/5,0);x.lineTo(i*w/5,h);x.stroke();x.beginPath();x.moveTo(0,i*h/5);x.lineTo(w,i*h/5);x.stroke()}
+ const P=(f1,f2)=>[w-(f2-600)/(2200-600)*(w-40)-20,(f1-250)/(900-250)*(h-30)+14];
+ const V=[['U',325,700],['O',450,800],['A',800,1150],['E',400,1600],['I',350,1700]];
+ const pts=V.map(v=>P(v[1],v[2]));x.beginPath();pts.forEach((p,i)=>i?x.lineTo(...p):x.moveTo(...p));x.strokeStyle='rgba(138,92,255,.6)';x.lineWidth=2;x.shadowColor='#8a5cff';x.shadowBlur=10;x.stroke();x.shadowBlur=0;
+ V.forEach((v,i)=>{x.fillStyle='#262d52';x.beginPath();x.arc(...pts[i],5,0,7);x.fill();x.fillStyle='#9aa3cc';x.font='bold 11px sans-serif';x.fillText(v[0],pts[i][0]+9,pts[i][1]+4)});
+ const a=pts[2],e=pts[3],t=.38,c=[a[0]+(e[0]-a[0])*t,a[1]+(e[1]-a[1])*t];
+ const g=x.createRadialGradient(...c,0,...c,34);g.addColorStop(0,'rgba(255,46,147,.55)');g.addColorStop(1,'rgba(255,46,147,0)');x.fillStyle=g;x.fillRect(c[0]-40,c[1]-40,80,80);
+ x.fillStyle='#fff';x.shadowColor='#ff2e93';x.shadowBlur=16;x.beginPath();x.arc(...c,7,0,7);x.fill();x.shadowBlur=0;
+ x.fillStyle='#6d7599';x.font='9px monospace';x.fillText('F2 →',w-34,h-4);x.fillText('F1',2,10)})();
+// ---- filter
+(()=>{const[x,w,h]=fit(flt);x.strokeStyle='rgba(255,255,255,.06)';for(let i=1;i<4;i++){x.beginPath();x.moveTo(0,i*h/4);x.lineTo(w,i*h/4);x.stroke()}
+ const fc=Math.log(2400/20)/Math.log(1000);const y=u=>{const d=(u-fc)*9;return h*.3+(d>0?Math.min(h*.65,d*d*h*.1+d*h*.1):0)-Math.exp(-(((u-fc)*30)**2))*h*.12};
+ x.beginPath();x.moveTo(0,h);for(let i=0;i<=w;i+=2)x.lineTo(i,y(i/w));x.lineTo(w,h);const g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,'rgba(0,229,255,.35)');g.addColorStop(1,'rgba(0,229,255,0)');x.fillStyle=g;x.fill();
+ x.beginPath();for(let i=0;i<=w;i+=2)i?x.lineTo(i,y(i/w)):x.moveTo(i,y(0));x.shadowColor='#00e5ff';x.shadowBlur=10;x.strokeStyle='#7ff3ff';x.lineWidth=2;x.stroke();x.shadowBlur=0;
+ x.fillStyle='#fff';x.shadowColor='#00e5ff';x.shadowBlur=14;x.beginPath();x.arc(fc*w,y(fc),5,0,7);x.fill()})();
+// ---- resonance bars (32 voices)
+(()=>{const[x,w,h]=fit(bars);const n=32,bw=w/n;for(let i=0;i<n;i++){const v=(.95/(1+i*.18))*(.7+.3*Math.abs(Math.sin(i*1.9)));const bh=v*(h-4),g=x.createLinearGradient(0,h-bh,0,h);g.addColorStop(0,i%2?'#ff2e93':'#8a5cff');g.addColorStop(1,'#00e5ff');x.fillStyle=g;x.shadowColor='#8a5cff';x.shadowBlur=6;x.fillRect(i*bw+1.5,h-bh,bw-3,bh)}})();
+</script></body></html>
