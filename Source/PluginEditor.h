@@ -24,6 +24,10 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attach;
     };
     std::vector<std::unique_ptr<Knob>> knobs;
+    juce::ComboBox modeBox, divBox;
+    juce::ToggleButton freezeBtn { "FREEZE" };
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> modeAtt, divAtt;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> freezeAtt;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MutationEngineEditor)
 };

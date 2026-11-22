@@ -19,6 +19,15 @@ inline constexpr const char* vowel      = "vowel";
 inline constexpr const char* formShift  = "formant_shift";
 inline constexpr const char* formMix    = "formant_mix";
 inline constexpr const char* midiTrack  = "midi_track";
+inline constexpr const char* glDiv      = "glitch_div";
+inline constexpr const char* glProb     = "glitch_prob";
+inline constexpr const char* glAmt      = "glitch_amount";
+inline constexpr const char* spFreeze   = "spec_freeze";
+inline constexpr const char* spDrift    = "spec_drift";
+inline constexpr const char* spShift    = "spec_shift";
+inline constexpr const char* spDrop     = "spec_dropout";
+inline constexpr const char* spScram    = "spec_scramble";
+inline constexpr const char* seed       = "seed";
 }
 
 namespace me
@@ -64,6 +73,19 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     l.add (std::make_unique<P> (ParameterID { ids::formMix, 1 }, "Formant Mix", NormalisableRange<float> (0, 1), 0.0f));
 
     l.add (std::make_unique<PB> (ParameterID { ids::midiTrack, 1 }, "MIDI Pitch", true));
+
+    l.add (std::make_unique<PC> (ParameterID { ids::glDiv, 1 }, "Glitch Division",
+                                 StringArray { "1/4", "1/8", "1/16", "1/32" }, 2));
+    l.add (std::make_unique<P> (ParameterID { ids::glProb, 1 }, "Glitch Probability", NormalisableRange<float> (0, 1), 0.35f));
+    l.add (std::make_unique<P> (ParameterID { ids::glAmt, 1 }, "Glitch Amount", NormalisableRange<float> (0, 1), 0.5f));
+
+    l.add (std::make_unique<PB> (ParameterID { ids::spFreeze, 1 }, "Freeze", false));
+    l.add (std::make_unique<P> (ParameterID { ids::spDrift, 1 }, "Drift", NormalisableRange<float> (0, 1), 0.25f));
+    l.add (std::make_unique<PI> (ParameterID { ids::spShift, 1 }, "Bin Shift", -128, 128, 0));
+    l.add (std::make_unique<P> (ParameterID { ids::spDrop, 1 }, "Bin Dropout", NormalisableRange<float> (0, 1), 0.0f));
+    l.add (std::make_unique<P> (ParameterID { ids::spScram, 1 }, "Bin Scramble", NormalisableRange<float> (0, 1), 0.0f));
+
+    l.add (std::make_unique<PI> (ParameterID { ids::seed, 1 }, "Seed", 0, 65535, 1));
     return l;
 }
 }
